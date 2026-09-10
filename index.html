@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Golden Rock Stone AI</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;background:#f7f7f5;color:#1f1f1f}
+.card{background:white;border:1px solid #ddd;border-radius:14px;padding:22px;margin-bottom:18px}
+button{padding:10px 16px;border:0;border-radius:9px;background:#222;color:white;cursor:pointer}
+pre{white-space:pre-wrap;background:#111;color:#eee;padding:16px;border-radius:10px;overflow:auto}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee;margin:3px}
+</style>
+</head>
+<body>
+<h1>Golden Rock Stone AI</h1>
+<p>MVP v0.1 — Drawing analysis, material-code detection, level/dimension extraction, and engineering safety rules.</p>
+<div class="card">
+  <input id="file" type="file" accept="application/pdf" />
+  <button onclick="go()">Analyze Drawing</button>
+</div>
+<div class="card">
+  <h3>Result</h3>
+  <div id="summary"></div>
+  <pre id="out">Upload a PDF drawing to begin.</pre>
+</div>
+<script>
+async function go(){
+ const f=document.getElementById('file').files[0];
+ if(!f){alert('Select a PDF first');return;}
+ const fd=new FormData(); fd.append('file',f);
+ document.getElementById('out').textContent='Analyzing...';
+ const r=await fetch('/analyze',{method:'POST',body:fd});
+ const j=await r.json();
+ document.getElementById('summary').innerHTML = (j.detected_codes||[]).map(x=>`<span class="badge">${x}</span>`).join('');
+ document.getElementById('out').textContent=JSON.stringify(j,null,2);
+}
+</script>
+</body>
+</html>

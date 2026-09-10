@@ -1,0 +1,23 @@
+{
+  "project": "Villa Modification - Plot PJFRD139, Palm Jumeirah",
+  "material_scope": {
+    "code": "EWMB-01",
+    "category": "Natural Stone",
+    "material": "Beige Travertine Romano Classico",
+    "thickness_mm": 20
+  },
+  "drawings": [
+    "B8-D139-IFC-AR-507 Ground Floor External Wall Finish Layout",
+    "B8-D139-IFC-AR-508 First Floor External Wall Finish Layout",
+    "B8-D139-IFC-AR-509 Roof Floor External Wall Finish Layout",
+    "B8-D139-IFC-AR-203 Elevation 1 - As Proposed",
+    "B8-D139-IFC-AR-204 Elevation 2 - As Proposed"
+  ],
+  "core_rules": [
+    "Never fabricate a dimension.",
+    "Explicit dimensions take precedence over scaled measurements.",
+    "Derive heights only from clearly identified levels.",
+    "When evidence conflicts or is missing, set status to RFI_REQUIRED.",
+    "Keep source drawing, page and evidence text for every derived quantity."
+  ]
+}
