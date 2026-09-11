@@ -51,6 +51,15 @@ class PlanRequest(Strict):
     material: MaterialSelection | None = None
     material_type: Literal['Travertine','Limestone'] | None = None
     material_weight_kg_m2: float | None = Field(default=None, gt=0)
+    stone_density_kg_m3: float | None = Field(default=None, gt=0)
+    building_height_m: float | None = Field(default=None, gt=0)
+    wind_pressure_kpa: float | None = Field(default=None, gt=0)
+    building_irregular: bool = False
+    wind_tunnel_completed: bool = False
+    substrate_type: str | None = None
+    anchor_capacity_kn: float | None = Field(default=None, gt=0)
+    fixing_spacing_mm: float | None = Field(default=None, gt=0)
+    allowable_deflection_mm: float | None = Field(default=None, gt=0)
     rock_wool: bool = False
     waterproofing: Literal['MasterSeal 550','Sika','approved equivalent'] = 'MasterSeal 550'
     joints_requested: bool = False
@@ -201,6 +210,23 @@ def plan(p: PlanRequest):
             rfi('u_channel_count', 'Enter verified total U-Channel pieces: each stone piece requires 2 channels, with 4 large and 4 small reverse brackets per channel.')
     elif p.system:
         rfi('fixing.count', 'Confirm bracket quantity and arrangement for the selected L/Z/Omega system.')
+    u_channel_detail = None
+    if p.system == 'U':
+        u_channel_detail = {
+            'status': 'PRELIMINARY — NOT FOR FABRICATION',
+            'sheet_title': 'Separate U-Channel fixing detail',
+            'channel_section': {'profile': 'U-Channel SS316', 'size_mm': [41, 41, 41], 'length_m': 2.8, 'cavity_mm': 110, 'stone_thickness_mm': profile['stone_thickness_mm']},
+            'insulation': {'type': 'Rock Wool', 'thickness_mm': 50, 'included_when_selected': p.rock_wool},
+            'bracket_schedule': [
+                {'type': 'Large bracket', 'size_mm': [100,100], 'quantity_per_channel': 4, 'positions': '2 top + 2 bottom'},
+                {'type': 'Small reverse bracket', 'size_mm': [50,100], 'quantity_per_channel': 4, 'positions': 'equally distributed between large brackets'},
+            ],
+            'anchor_detail': {'anchor': 'Fischer', 'anchors_per_bracket': 4, 'hole_sealing': 'Epoxy injection at each drilled hole', 'pin_diameter_mm': 5, 'pin_embedment_mm': 20},
+            'panel_relation': '2 U-Channels per stone piece; 4 large + 4 small brackets per channel',
+            'sections': ['U-channel vertical section', 'top bracket section', 'bottom bracket section', 'reverse bracket section', 'stone-to-channel interface', 'waterproofing and Rock Wool build-up'],
+            'corner_intersection': {'projection_mm': 110, 'projection_m': 0.11, 'requirement': 'Required 110mm projection at the meeting point of corner returns.'},
+            'notes': ['Keep bracket projection uniform by system/zone.', 'Corner intersection projection is fixed at 110mm (11cm) and must be shown at every applicable corner return.', 'Confirm substrate, anchor capacity, edge distances and final spacing by engineer.', 'This sheet is separate from the stone panel elevation and is not for fabrication.']
+        }
     quantities = None
     if p.system == 'U' and p.u_channel_count is not None:
         total_brackets = 8*p.u_channel_count
@@ -217,7 +243,7 @@ def plan(p: PlanRequest):
     status = 'RFI_REQUIRED' if rfis else 'REVIEW_REQUIRED'
     area = p.width_mm*p.height_mm/1e6 if p.width_mm and p.height_mm and p.dimensions_verified else None
     detail_sheet = {'status':'PRELIMINARY — NOT FOR FABRICATION','profile':profile['label'],'sheet_title':'External cladding pattern drawings','detail_numbers':{name:i+1 for i,name in enumerate(p.detail_types)},'details':p.detail_types,'notes':['Do not scale; use written dimensions only.','All dimensions in millimetres; levels in metres.','Verify site dimensions before production.','Coordinate discrepancies between drawings, specification and BOQ with the designer.','Window side, wall corner, typical crown and roof balustrade crown require approved fixing and waterproofing details.','NOTE: These drawings are prepared in line with Dubai Municipality requirements and the governing systems for facade works. Final issue remains subject to engineer and authority review and approval.'],'profile_dimensions':{'stone_thickness_mm':profile['stone_thickness_mm'],'horizontal_joint_mm':p.horizontal_joint_mm if p.detail_profile == 'project_option2_25mm' else joint,'vertical_joint_mm':p.vertical_joint_mm,'parapet_groove_width_mm':p.parapet_groove_width_mm,'parapet_groove_depth_mm':p.parapet_groove_depth_mm,'corner_machine_cut_mm':p.corner_machine_cut_mm,'groove_width_mm':p.groove_width_mm,'groove_depth_mm':p.groove_depth_mm,'glue_mockup_required':p.detail_profile == 'project_option2_25mm'}}
-    rules = {'detail_profile':p.detail_profile,'stone_thickness_mm':profile['stone_thickness_mm'],'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'vertical_joint_mm':p.vertical_joint_mm,'corner':p.corner,'material_type':p.material_type,'material_weight_kg_m2':p.material_weight_kg_m2 if p.material_weight_kg_m2 is not None else (70 if p.material_type in ('Travertine','Limestone') else None),'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0,'engineering_notice':'These preliminary drawings are structured against Dubai Municipality requirements and governing facade systems; final design remains subject to engineer and authority review/approval.'}
+    rules = {'detail_profile':p.detail_profile,'stone_thickness_mm':profile['stone_thickness_mm'],'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'vertical_joint_mm':p.vertical_joint_mm,'corner':p.corner,'corner_intersection_projection_mm':110,'material_type':p.material_type,'material_weight_kg_m2':p.material_weight_kg_m2 if p.material_weight_kg_m2 is not None else (70 if p.material_type in ('Travertine','Limestone') else None),'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0,'engineering_notice':'These preliminary drawings are structured against Dubai Municipality requirements and governing facade systems; final design remains subject to engineer and authority review/approval.'}
     if p.system == 'U':
         rules.update({'u_channels_per_stone_piece':2,'u_channel_length_m':2.8,'u_channel_length_per_stone_piece_m':5.6,'large_brackets_per_stone_piece':8,'small_reverse_brackets_per_stone_piece':8,'fischer_anchors_per_bracket':4,'fischer_anchors_per_stone_piece':64})
     engineering_checklist = [
@@ -234,6 +260,6 @@ def plan(p: PlanRequest):
         {'id':'ENG-11','item':'MEP, glazing, doors, roof, balustrade and lightning protection coordination','status':'RFI_REQUIRED'},
         {'id':'ENG-12','item':'Revision history, engineer comments, as-built and maintenance access','status':'REVIEW_REQUIRED'},
     ]
-    return {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':rules,'engineering_checklist':engineering_checklist,'setting_out':setting,'fixing_details':fixing,'fixing_layout':fixing_layout,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels,'detail_sheet':detail_sheet,'fixing_layout':fixing_layout,'engineering_checklist':engineering_checklist},'detail_sheet':detail_sheet,'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
+    return {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':rules,'engineering_checklist':engineering_checklist,'setting_out':setting,'fixing_details':fixing,'fixing_layout':fixing_layout,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels,'detail_sheet':detail_sheet,'fixing_layout':fixing_layout,'engineering_checklist':engineering_checklist,'u_channel_detail':u_channel_detail},'detail_sheet':detail_sheet,'u_channel_detail':u_channel_detail,'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
 
 

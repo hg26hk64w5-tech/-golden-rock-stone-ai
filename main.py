@@ -10,6 +10,13 @@ app = FastAPI(title="Golden Rock Stone AI", version="0.2.0")
 def rules():
     return {'systems': SYSTEMS, 'workflow': WORKFLOW, 'fabrication_fields': FABRICATION_FIELDS}
 
+@app.get('/api/project/external-stone')
+def external_stone_register():
+    path = os.path.join(os.path.dirname(__file__), 'external_stone_project_register.json')
+    with open(path, 'r', encoding='utf-8') as f:
+        import json
+        return json.load(f)
+
 @app.post('/api/cladding/plan')
 def cladding_plan(request: PlanRequest):
     return plan(request)
