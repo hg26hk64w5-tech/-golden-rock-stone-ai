@@ -1,0 +1,165 @@
+"""External wall planning rules. Millimetres throughout; never infer fabrication details."""
+import math
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field
+
+WORKFLOW = ['Scope', 'Internal/External', 'Area/Element', 'Installation System', 'Material', 'Panelization', 'Fixing Details', 'Shop Drawing', 'Cutting List', 'Quantity Takeoff', 'RFI']
+SYSTEMS = {
+    'L': {'label': 'L-Bracket SS316 50mm', 'nominal_mm': 50},
+    'Z': {'label': 'Z-Bracket SS316 70mm', 'nominal_mm': 70},
+    'OMEGA': {'label': 'Omega SS316 70mm', 'nominal_mm': 70},
+    'U': {'label': 'U-Channel 41×41×41mm', 'channel_mm': [41,41,41], 'cavity_mm': 110},
+}
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+
+class Slab(Strict):
+    width_mm: float = Field(gt=0)
+    height_mm: float = Field(gt=0)
+
+class MaterialSelection(Strict):
+    name: str = Field(min_length=1)
+    slabs: list[Slab] = Field(default_factory=list, max_length=100)
+    thickness_mm: float = Field(default=20, gt=0)
+    min_panel_width_mm: float | None = Field(default=None, gt=0)
+    max_panel_width_mm: float | None = Field(default=None, gt=0)
+    kerf_mm: float | None = Field(default=None, ge=0)
+    edge_trim_mm: float | None = Field(default=None, ge=0)
+
+class Survey(Strict):
+    # Signed coordinates on one outward normal, relative to a common datum.
+    wall_offsets_mm: list[float] = Field(default_factory=list, max_length=10000)
+    datum: str | None = None
+    cavity_mm: float | None = Field(default=None, gt=0)
+    cavity_reference: Literal['waterproofing_face', 'insulation_face'] | None = None
+    final_stone_face_mm: float | None = None
+    bracket_projection_mm: float | None = Field(default=None, gt=0)
+    projection_approved: bool = False
+    adjustment_capacity_mm: float | None = Field(default=None, ge=0)
+
+class PlanRequest(Strict):
+    scope: str = 'Stone Works'
+    environment: Literal['External','Internal'] = 'External'
+    element: str = 'Wall Cladding'
+    zone: str = 'Zone 1'
+    system: Literal['L','Z','OMEGA','U'] | None = None
+    u_channel_count: int | None = Field(default=None, gt=0, le=1000000, strict=True)
+    width_mm: float | None = Field(default=None, gt=0, le=1000000)
+    height_mm: float | None = Field(default=None, gt=0, le=1000000)
+    dimensions_verified: bool = False
+    material: MaterialSelection | None = None
+    rock_wool: bool = False
+    waterproofing: Literal['MasterSeal 550','Sika','approved equivalent'] = 'MasterSeal 550'
+    joints_requested: bool = False
+    joint_mm: float | None = Field(default=None, ge=0)
+    corner: Literal['45° mitre','5mm then 45° Bird’s Mouth'] = '45° mitre'
+    survey: Survey = Field(default_factory=Survey)
+    fabrication: dict[str, float | None] = Field(default_factory=dict)
+    fabrication_approved: bool = False
+    conflicts: list[str] = Field(default_factory=list)
+
+FABRICATION_FIELDS = ['bracket_thickness_mm', 'anchor_diameter_mm', 'anchor_embedment_mm', 'hole_diameter_mm', 'pin_length_mm', 'pin_edge_distance_mm', 'fixing_top_offset_mm', 'fixing_bottom_offset_mm', 'fixing_side_offset_mm', 'corner_return_mm']
+
+def plan(p: PlanRequest):
+    rfis = []
+    def rfi(field, message):
+        rfis.append({'id': f'RFI-{len(rfis)+1:03d}', 'field':field, 'status':'RFI_REQUIRED', 'message':message})
+    if p.environment != 'External' or p.element != 'Wall Cladding':
+        rfi('scope', 'Only External Wall Cladding is implemented in this release.')
+    for conflict in p.conflicts:
+        rfi('conflicts', conflict)
+    if not p.system: rfi('system', 'Client must select the installation system.')
+    if not p.width_mm or not p.height_mm or not p.dimensions_verified:
+        rfi('dimensions', 'Verified wall width and height are required.')
+    if not p.material or not p.material.name.strip() or not p.material.slabs:
+        rfi('material', 'Select material and available slab sizes before panelization.')
+    if p.material and p.material.thickness_mm != 20:
+        rfi('material.thickness_mm', 'Conflicts with external wall stone thickness of 20mm.')
+    if p.material and p.material.min_panel_width_mm is not None and p.material.max_panel_width_mm is not None and p.material.min_panel_width_mm > p.material.max_panel_width_mm:
+        rfi('material.panel_width_limits', 'Minimum panel width exceeds material maximum.')
+    if p.joints_requested and (p.joint_mm is None or p.joint_mm <= 0):
+        rfi('joint_mm', 'Project-requested joints need an explicit positive dimension.')
+    if not p.joints_requested and p.joint_mm not in (None,0):
+        rfi('joint_mm', 'Joint dimension conflicts with no-joints default.')
+    joint = (p.joint_mm or 0) if p.joints_requested else 0
+    for field in FABRICATION_FIELDS:
+        value = p.fabrication.get(field)
+        if value is None or not math.isfinite(value) or value <= 0:
+            rfi('fabrication.'+field, 'Missing or invalid fabrication dimension; obtain approved detail.')
+    for field in p.fabrication:
+        if field not in FABRICATION_FIELDS: rfi('fabrication.'+field, 'Unrecognized fabrication dimension; clarify its meaning.')
+    if not p.fabrication_approved: rfi('fabrication_approved', 'Fixing layout, anchors, corner geometry and structural suitability require approved detail.')
+    if p.fabrication.get('pin_length_mm') is not None and p.fabrication['pin_length_mm'] < 20:
+        rfi('fabrication.pin_length_mm', 'Pin length cannot be shorter than the 20mm embedment.')
+    s = p.survey
+    setting = None
+    if not s.wall_offsets_mm or not s.datum or not s.datum.strip():
+        rfi('survey', 'Survey points and a common datum with positive outward normal are required.')
+    cavity = 110 if p.system == 'U' else s.cavity_mm
+    if p.system == 'U' and s.cavity_mm not in (None,110): rfi('survey.cavity_mm', 'U-Channel cavity must be 110mm.')
+    if cavity is None: rfi('survey.cavity_mm', 'Confirm cavity; nominal bracket size is not a cavity dimension.')
+    if s.cavity_reference is None: rfi('survey.cavity_reference', 'Confirm whether cavity is measured from waterproofing or insulation face.')
+    if p.rock_wool and s.cavity_reference == 'waterproofing_face' and cavity is not None and cavity < 50:
+        rfi('survey.cavity_mm', '50mm rock wool cannot fit inside this cavity.')
+    if s.wall_offsets_mm and cavity is not None and s.cavity_reference:
+        closest = max(s.wall_offsets_mm)
+        deviation = closest-min(s.wall_offsets_mm)
+        face = closest + 4 + (50 if p.rock_wool and s.cavity_reference == 'insulation_face' else 0) + cavity + 20
+        setting = {'datum':s.datum, 'closest_wall_point_mm':closest, 'wall_deviation_mm':deviation, 'final_stone_face_mm':face, 'cavity_mm':cavity, 'cavity_reference':s.cavity_reference, 'uniform_bracket_projection_mm':s.bracket_projection_mm, 'zone':p.zone, 'system':p.system}
+        if s.final_stone_face_mm is not None and abs(s.final_stone_face_mm-face) > 0.01:
+            rfi('survey.final_stone_face_mm', 'Requested final face conflicts with closest wall point and build-up.')
+        if s.adjustment_capacity_mm is None or s.adjustment_capacity_mm < deviation:
+            rfi('survey.adjustment_capacity_mm', 'Approved adjustment capacity must accommodate wall deviation without varying bracket projection.')
+    if s.bracket_projection_mm is None or not s.projection_approved:
+        rfi('survey.bracket_projection_mm', 'Approve one uniform bracket projection for this system/zone; do not derive it from nominal bracket size.')
+    panels, layout = [], None
+    m = p.material
+    if m and (m.kerf_mm is None or m.edge_trim_mm is None):
+        rfi('material.cutting_allowances', 'Confirm saw kerf and slab edge trim before cutting optimization.')
+    can_panelize = (p.environment == 'External' and p.element == 'Wall Cladding' and p.width_mm and p.height_mm and p.dimensions_verified and m and m.slabs and m.kerf_mm is not None and m.edge_trim_mm is not None)
+    if can_panelize:
+        choices = []
+        for index, slab in enumerate(m.slabs):
+            usable_w = slab.width_mm-2*m.edge_trim_mm-m.kerf_mm
+            usable_h = min(700, slab.height_mm-2*m.edge_trim_mm-m.kerf_mm)
+            if m.max_panel_width_mm is not None: usable_w = min(usable_w,m.max_panel_width_mm)
+            if usable_w <= 0 or usable_h <= 0: continue
+            cols = max(1,math.ceil((p.width_mm+joint)/(usable_w+joint)))
+            rows = max(1,math.ceil((p.height_mm+joint)/(usable_h+joint)))
+            w = (p.width_mm-(cols-1)*joint)/cols
+            h = (p.height_mm-(rows-1)*joint)/rows
+            if w <= 0 or h <= 0 or (m.min_panel_width_mm is not None and w < m.min_panel_width_mm): continue
+            # Equal redistribution avoids narrow end strips. No fixed minimum width.
+            choices.append((cols*rows,-w,index,cols,rows,w,h))
+        if not choices: rfi('panelization', 'No layout fits the material slab sizes and selected material limits.')
+        else:
+            count,_,index,cols,rows,w,h = min(choices)
+            if count > 10000: rfi('panelization', 'More than 10,000 panels; split into smaller zones.')
+            else:
+                layout = {'columns':cols,'rows':rows,'panel_width_mm':w,'panel_height_mm':h,'slab_index':index,'method':'Equalized grid: minimize panel count, then maximize width; grain direction preserved; no slab nesting claim.'}
+                top = p.fabrication.get('fixing_top_offset_mm')
+                bottom = p.fabrication.get('fixing_bottom_offset_mm')
+                side = p.fabrication.get('fixing_side_offset_mm')
+                if top is not None and bottom is not None and top+bottom >= h:
+                    rfi('fabrication.fixing_offsets', 'Top and bottom offsets overlap or exceed panel height.')
+                if side is not None and 2*side >= w:
+                    rfi('fabrication.fixing_side_offset_mm', 'Opposing side offsets overlap or exceed panel width.')
+                for row in range(rows):
+                    for col in range(cols):
+                        panels.append({'id':f'P{row+1}-{col+1}','x_mm':col*(w+joint),'y_mm':row*(h+joint),'width_mm':w,'height_mm':h,'thickness_mm':20})
+    fixing = {'pin_diameter_mm':5,'pin_embedment_mm':20,'uniform_projection_per':'system/zone'}
+    if p.system == 'U':
+        fixing.update({'large_brackets':{'count':4,'size_mm':[100,100],'positions':'2 top + 2 bottom'},'small_reverse_brackets':{'count':4,'size_mm':[50,100],'positions':'between large brackets'}})
+        fixing['quantity_basis'] = 'per U-Channel piece (client confirmed)'
+        if p.u_channel_count is None:
+            rfi('u_channel_count', 'Enter verified number of U-Channel pieces: each uses 4 large and 4 small reverse brackets.')
+    elif p.system:
+        rfi('fixing.count', 'Confirm bracket quantity and arrangement for the selected L/Z/Omega system.')
+    quantities = None
+    if p.system == 'U' and p.u_channel_count is not None:
+        quantities = {'u_channel_pieces':p.u_channel_count,'large_brackets':4*p.u_channel_count,'small_reverse_brackets':4*p.u_channel_count,'total_brackets':8*p.u_channel_count}
+    status = 'RFI_REQUIRED' if rfis else 'REVIEW_REQUIRED'
+    area = p.width_mm*p.height_mm/1e6 if p.width_mm and p.height_mm and p.dimensions_verified else None
+    return {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':{'stone_thickness_mm':20,'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'corner':p.corner,'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0},'setting_out':setting,'fixing_details':fixing,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels},'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
+

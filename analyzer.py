@@ -29,10 +29,10 @@ DIM_RE = re.compile(r"(?<![\d.])(?:\d{1,2}\.\d{2})(?![\d.])")
 
 
 def extract_pdf_text(path: str):
-    doc = fitz.open(path)
     pages = []
-    for i, page in enumerate(doc, start=1):
-        pages.append((i, page.get_text("text")))
+    with fitz.open(path) as doc:
+        for i, page in enumerate(doc, start=1):
+            pages.append((i, page.get_text("text")))
     return pages
 
 

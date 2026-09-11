@@ -1,40 +1,16 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Golden Rock Stone AI</title>
-<style>
-body{font-family:Arial,sans-serif;max-width:980px;margin:40px auto;padding:0 20px;background:#f7f7f5;color:#1f1f1f}
-.card{background:white;border:1px solid #ddd;border-radius:14px;padding:22px;margin-bottom:18px}
-button{padding:10px 16px;border:0;border-radius:9px;background:#222;color:white;cursor:pointer}
-pre{white-space:pre-wrap;background:#111;color:#eee;padding:16px;border-radius:10px;overflow:auto}
-.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#eee;margin:3px}
-</style>
-</head>
-<body>
-<h1>Golden Rock Stone AI</h1>
-<p>MVP v0.1 — Drawing analysis, material-code detection, level/dimension extraction, and engineering safety rules.</p>
-<div class="card">
-  <input id="file" type="file" accept="application/pdf" />
-  <button onclick="go()">Analyze Drawing</button>
-</div>
-<div class="card">
-  <h3>Result</h3>
-  <div id="summary"></div>
-  <pre id="out">Upload a PDF drawing to begin.</pre>
-</div>
-<script>
-async function go(){
- const f=document.getElementById('file').files[0];
- if(!f){alert('Select a PDF first');return;}
- const fd=new FormData(); fd.append('file',f);
- document.getElementById('out').textContent='Analyzing...';
- const r=await fetch('/analyze',{method:'POST',body:fd});
- const j=await r.json();
- document.getElementById('summary').innerHTML = (j.detected_codes||[]).map(x=>`<span class="badge">${x}</span>`).join('');
- document.getElementById('out').textContent=JSON.stringify(j,null,2);
-}
-</script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Golden Rock Stone AI</title><style>
+*{box-sizing:border-box}body{margin:0;background:#101b17;color:#edf0e9;font-family:system-ui,sans-serif}header,main{max-width:1200px;margin:auto;padding:24px}header{border-bottom:1px solid #425346}h1{font-size:28px}h2,.brand{color:#e0bc78}p{line-height:1.6;color:#becbbf}nav,.actions{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}button{padding:12px 16px;border:0;border-radius:7px;cursor:pointer;background:#d9b575;color:#17251c;font-weight:bold}nav button{background:#293c2f;color:#d3dccf}nav button.active{background:#d9b575;color:#17251c}button:disabled{opacity:.4;cursor:default}section,details{background:#1b2b21;border:1px solid #3c5242;padding:24px;border-radius:12px;margin-bottom:20px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}label{display:block;font-size:14px;margin:12px 0;color:#d0dcca}input,textarea,select{display:block;width:100%;padding:11px;border:1px solid #53694f;border-radius:6px;background:#111f17;color:white;margin-top:8px;font:inherit}input[type=checkbox]{display:inline;width:auto;margin-right:8px}textarea{min-height:95px}pre{white-space:pre-wrap;overflow-wrap:anywhere}table{width:100%;border-collapse:collapse;font-size:13px}td{border-bottom:1px solid #53694f;padding:8px}.scroll{overflow:auto}.rfi{border-left:3px solid #d9b575;padding:12px;background:#263b2c;margin:8px 0}svg{width:100%;max-height:520px;background:#f4f0e6}[hidden]{display:none!important}#notice{color:#e0bc78}footer{padding:24px;color:#bfccba}</style></head><body>
+<header><div class="brand">GOLDEN ROCK · ENGINEERING WORKSPACE</div><h1>Golden Rock Stone AI</h1><p>External Wall Cladding · Material-led panelization · Survey setting-out</p></header><main><nav id="steps" aria-label="Workflow"></nav><form id="form">
+<section data-step="0"><h2>Scope</h2><label>Project scope<input id="scope" value="Stone Works"></label><p>Plan a rectangular wall zone using verified project dimensions. PDF extraction remains available below as supporting evidence.</p></section>
+<section data-step="1" hidden><h2>Internal / External</h2><label>Environment<select id="environment"><option>External</option><option>Internal</option></select></label><p>This release implements External Wall Cladding. Other scopes require further rules.</p></section>
+<section data-step="2" hidden><h2>Area / Element</h2><div class="grid"><label>Zone<input id="zone" value="Zone 1"></label><label>Element<select id="element"><option>Wall Cladding</option><option>Flooring</option><option>Stairs</option></select></label><label>Width mm<input id="width" type="number" step="any"></label><label>Height mm<input id="height" type="number" step="any"></label></div><label><input id="verified" type="checkbox">Dimensions verified from project evidence</label></section>
+<section data-step="3" hidden><h2>Installation System</h2><label>Client selection<select id="system"><option value="">Select system</option></select></label><p>Nominal bracket size is not automatically the cavity or fabrication projection. U-Channel cavity: 110mm.</p></section>
+<section data-step="4" hidden><h2>Material Selection</h2><div class="grid"><label>Material name<input id="material"></label><label>Stone thickness mm<input id="thickness" type="number" value="20" step="any"></label><label>Material minimum panel width mm — optional<input id="minwidth" type="number" step="any"></label><label>Material maximum panel width mm — optional<input id="maxwidth" type="number" step="any"></label><label>Saw kerf mm<input id="kerf" type="number" step="any"></label><label>Slab edge trim mm, each side<input id="trim" type="number" step="any"></label></div><label>Available slabs: width × height mm, one per line<textarea id="slabs"></textarea></label><p>No fixed minimum width. Slab orientation is preserved; enter width in the approved grain direction.</p></section>
+<section data-step="5" hidden><h2>Panelization</h2><p>Maximum height 700mm. Equal rows and columns avoid narrow leftover strips. Width follows material and slab sizes.</p><label><input id="joints" type="checkbox">Project requests joints</label><label>Requested joint mm<input id="joint" type="number" step="any"></label><label>Corner<select id="corner"><option>45° mitre</option><option>5mm then 45° Bird’s Mouth</option></select></label></section>
+<section data-step="6" hidden><h2>Fixing Details & Setting-out</h2><p>Pin Ø5mm / embedment 20mm. U system: 4 large brackets 100×100 (2 top + 2 bottom) and 4 small reverse brackets 50×100 between them. Each U-Channel piece uses 4 large and 4 small reverse brackets.</p><label>Verified U-Channel piece count<input id="channelCount" type="number" min="1" step="1"></label><label>Waterproofing<select id="waterproofing"><option>MasterSeal 550</option><option>Sika</option><option>approved equivalent</option></select></label><p>Cementitious: 2 coats × 2mm = 4mm.</p><label><input id="wool" type="checkbox">Rock Wool 50mm</label><div class="grid"><label>Survey datum and outward axis description<input id="datum"></label><label>Signed wall offsets mm, comma separated<input id="points"></label><label>Cavity mm (U = 110)<input id="cavity" type="number" step="any"></label><label>Cavity reference<select id="reference"><option value="">Confirm reference</option><option value="waterproofing_face">Waterproofing face</option><option value="insulation_face">Insulation face</option></select></label><label>Specified final stone face mm, optional<input id="face" type="number" step="any"></label><label>Uniform bracket projection mm<input id="projection" type="number" step="any"></label><label>Approved adjustment capacity mm<input id="adjustment" type="number" step="any"></label></div><label><input id="projectionApproved" type="checkbox">Projection approved for this system / zone</label><p>Closest wall point is the largest outward coordinate. Final face includes waterproofing, confirmed cavity reference, applicable insulation and stone.</p><div class="grid" id="fabrication"></div><label><input id="fabricationApproved" type="checkbox">Fixing layout and corner detail reviewed and approved</label><label>Missing / conflicting project details, one per line<textarea id="conflicts"></textarea></label></section>
+<section data-step="7" hidden><h2>Shop Drawing</h2><p>Preliminary panel elevation. Fixing holes and corner cuts await approved fabrication details.</p><div id="drawing"></div><pre id="setting"></pre></section>
+<section data-step="8" hidden><h2>Cutting List</h2><p>PRELIMINARY — NOT FOR FABRICATION. Nominal face sizes; machining and corner geometry require approved details.</p><div id="cutting" class="scroll"></div><button id="csv" type="button" disabled>Download preliminary CSV</button></section>
+<section data-step="9" hidden><h2>Quantity Takeoff</h2><p>Gross rectangular zone only. Confirm openings, waste and fixing quantities.</p><pre id="quantity"></pre></section>
+<section data-step="10" hidden><h2>RFI</h2><div id="rfis">Calculate to list missing or conflicting information.</div></section>
+<div class="actions"><button id="prev" type="button">Previous</button><button id="next" type="button">Next</button><button id="calculate" type="submit">Calculate / Refresh</button><button id="json" type="button" disabled>Download review package</button></div></form><p id="notice" role="status" aria-live="polite">Enter confirmed project information. Blank fabrication dimensions remain unresolved.</p><details><summary>PDF Drawing Analysis</summary><p>Extract text evidence. Detected numbers are not verified wall dimensions.</p><input id="pdf" type="file" accept="application/pdf"><button id="analyze" type="button">Analyze PDF</button><pre id="pdfResult"></pre></details></main><footer>v0.2 · External Wall Cladding · Drawing and cutting outputs require project review.</footer><script src="/app.js"></script></body></html>
+
