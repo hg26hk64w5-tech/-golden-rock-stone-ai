@@ -12,7 +12,34 @@ function payload(){
  return {scope:value('scope'),environment:value('environment'),element:value('element'),zone:value('zone'),system:value('system')||null,u_channel_count:num('channelCount'),width_mm:num('width'),height_mm:num('height'),dimensions_verified:$('verified').checked,material_type:value('materialType')||null,material_weight_kg_m2:num('materialWeight'),material:value('material')?{name:value('material'),slabs,thickness_mm:Number(thicknessProfile||num('thickness')),min_panel_width_mm:num('minwidth'),max_panel_width_mm:num('maxwidth'),kerf_mm:num('kerf'),edge_trim_mm:num('trim')}:null,rock_wool:$('wool').checked,waterproofing:value('waterproofing'),joints_requested:$('joints').checked,joint_mm:num('joint'),corner:value('corner'),stone_fixings_per_piece:num('stoneFixings'),stone_fixing_type:value('stoneFixingType')||null,stone_density_kg_m3:num('density'),building_height_m:num('buildingHeight'),wind_pressure_kpa:num('windPressure'),building_irregular:false,wind_tunnel_completed:false,substrate_type:value('substrate')||null,anchor_capacity_kn:num('anchorCapacity'),fixing_spacing_mm:num('fixingSpacing'),allowable_deflection_mm:num('deflection'),detail_profile:detailProfile,horizontal_joint_mm:num('horizontalJoint'),vertical_joint_mm:num('verticalJoint'),parapet_groove_width_mm:num('parapetGrooveWidth'),parapet_groove_depth_mm:num('parapetGrooveDepth'),corner_machine_cut_mm:num('cornerMachineCut'),groove_width_mm:num('grooveWidth'),groove_depth_mm:num('grooveDepth'),survey:{datum:value('datum')||null,wall_offsets_mm:points,cavity_mm:num('cavity'),cavity_reference:value('reference')||null,final_stone_face_mm:num('face'),bracket_projection_mm:num('projection'),projection_approved:$('projectionApproved').checked,adjustment_capacity_mm:num('adjustment')},fabrication:Object.fromEntries(rules.fabrication_fields.map(f=>[f,num(f)])),fabrication_approved:$('fabricationApproved').checked,conflicts:value('conflicts').split('\n').filter(x=>x.trim())};
 }
 function download(name,content,type){const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-const projectFiles=$('projectFiles'); if(projectFiles){$('uploadBatch').onclick=async()=>{try{if(!projectFiles.files.length)throw Error('Select the project files first.');const fd=new FormData();for(const f of projectFiles.files)fd.append('files',f);const r=await fetch('/api/project/upload-batch',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw Error(JSON.stringify(data));$('batchResult').textContent=JSON.stringify(data,null,2);}catch(e){$('batchResult').textContent=e.message;}};}
+function refreshProjectRegister(){return fetch('/api/project/external-stone').then(r=>r.json()).then(data=>{$('projectRegister').textContent=JSON.stringify(data,null,2);return data;}).catch(()=>{$('projectRegister').textContent='Project register unavailable.';});}
+function useZone(z){
+ $('zone').value=z.zone_id; $('verified').checked=false;
+ show(2); dirty();
+ const catIsStone=true; // this list only ever contains Natural Stone zones (see analyzer.py)
+ $('materialType').value='Travertine'; $('material').value=z.material_name;
+ if(z.thickness_mm){$('thickness').value=z.thickness_mm; if(z.thickness_mm===20)$('thicknessProfile').value='20'; else if(z.thickness_mm===25)$('thicknessProfile').value='25'; else if(z.thickness_mm===30)$('thicknessProfile').value='30';}
+ const noteBox=$('zoneUseNote')||(()=>{const p=document.createElement('p');p.id='zoneUseNote';p.style.color='#e0bc78';$('form').querySelector('[data-step="2"]').append(p);return p;})();
+ noteBox.textContent=`Auto-filled from sheet ${z.sheet}, code ${z.material_code}. Width/height and "verified" still need confirming from CAD/survey (${z.note})`;
+}
+function renderDetectedZones(register){
+ const box=$('detectedZones'); if(!box) return;
+ box.replaceChildren();
+ if(!register || !register.zones || !register.zones.length){box.textContent='No natural-stone cladding code was detected in the uploaded PDFs.'; return;}
+ const h=document.createElement('h3'); h.textContent=`Detected external stone/marble zones (${register.zones.length})`; box.append(h);
+ for(const z of register.zones){
+  const card=document.createElement('div'); card.className='card';
+  const t=document.createElement('strong'); t.textContent=`${z.zone_id}`; card.append(t);
+  const d=document.createElement('p'); d.textContent=`${z.material_name}${z.thickness_mm?` · ${z.thickness_mm}mm`:''} — sheet ${z.sheet}`; card.append(d);
+  const b=document.createElement('button'); b.type='button'; b.textContent='Use this zone →'; b.onclick=()=>useZone(z); card.append(b);
+  box.append(card);
+ }
+ if(register.rfi_required && register.rfi_required.length){
+  const h2=document.createElement('h3'); h2.textContent='Open items from this analysis'; box.append(h2);
+  for(const item of register.rfi_required){const p=document.createElement('p'); p.textContent='• '+item; box.append(p);}
+ }
+}
+const projectFiles=$('projectFiles'); if(projectFiles){$('uploadBatch').onclick=async()=>{try{if(!projectFiles.files.length)throw Error('Select the project files first.');$('batchResult').textContent='Analyzing…';const fd=new FormData();for(const f of projectFiles.files)fd.append('files',f);const r=await fetch('/api/project/upload-batch',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw Error(JSON.stringify(data));$('batchResult').textContent=JSON.stringify({status:data.status,file_count:data.file_count,files:data.files,analysis_errors:data.analysis_errors},null,2);renderDetectedZones(data.project_register);if(data.project_register)await refreshProjectRegister();}catch(e){$('batchResult').textContent=e.message;}};}
 function render(){
  $('notice').textContent=`${result.status} · ${result.quantity_takeoff.panel_count} panels · ${result.rfis.length} RFIs · NOT FOR FABRICATION`;
  $('rfis').replaceChildren(...result.rfis.map(r=>{const d=document.createElement('div');d.className='rfi';d.textContent=`${r.id} · ${r.field}: ${r.message}`;return d;}));
@@ -29,7 +56,7 @@ $('dxf').onclick=async()=>{if(!result||!result.input)return;try{const r=await fe
 $('csv').onclick=()=>result&&download('preliminary-cutting-list.csv','Status,Panel,Width mm,Height mm,Thickness mm\n'+result.cutting_list.items.map(p=>['NOT FOR FABRICATION',p.id,p.width_mm,p.height_mm,p.thickness_mm].join(',')).join('\n'),'text/csv');
 $('analyze').onclick=async()=>{try{const file=$('pdf').files[0];if(!file)throw Error('Select a PDF first.');const fd=new FormData();fd.append('file',file);$('pdfResult').textContent='Analyzing…';const response=await fetch('/analyze',{method:'POST',body:fd}),data=await response.json();if(!response.ok)throw Error(JSON.stringify(data));$('pdfResult').textContent=JSON.stringify(data,null,2);}catch(e){$('pdfResult').textContent=e.message;}};
 fetch('/api/cladding/rules').then(r=>{if(!r.ok)throw Error('Unable to load rules');return r.json();}).then(data=>{rules=data;data.workflow.forEach((name,i)=>{const b=document.createElement('button');b.type='button';b.textContent=`${i+1}. ${name}`;b.onclick=()=>show(i);$('steps').append(b);});Object.entries(data.systems).forEach(([key,s])=>{const o=document.createElement('option');o.value=key;o.textContent=s.label;$('system').append(o);});data.fabrication_fields.forEach(f=>{const label=document.createElement('label');label.textContent=f.replaceAll('_',' ');const input=document.createElement('input');input.id=f;input.type='number';input.min='0';input.step='any';label.append(input);$('fabrication').append(label);});show(0);}).catch(e=>{$('notice').textContent=e.message;$('calculate').disabled=true;});
-fetch('/api/project/external-stone').then(r=>r.json()).then(data=>{$('projectRegister').textContent=JSON.stringify(data,null,2);}).catch(()=>{$('projectRegister').textContent='Project register unavailable.';});
+refreshProjectRegister();
 
 
 

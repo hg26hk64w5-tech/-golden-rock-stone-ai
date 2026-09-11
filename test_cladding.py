@@ -1,9 +1,11 @@
 import copy
+import os
 import unittest
-import fitz
 from fastapi.testclient import TestClient
 from main import app
 from cladding import PlanRequest, plan
+
+FIXTURE = os.path.join(os.path.dirname(__file__), 'fixtures', 'AR-509.pdf')
 
 BASE = {'system':'U','u_channel_count':3,'width_mm':3200,'height_mm':2100,'dimensions_verified':True,
         'material':{'name':'Travertine','slabs':[{'width_mm':2500,'height_mm':1400}],'kerf_mm':3,'edge_trim_mm':10},
@@ -77,11 +79,23 @@ class ApiTests(unittest.TestCase):
     def test_invalid_dimension_and_system(self):
         for patch in [{'width_mm':-1},{'system':'bad'},{'u_channel_count':1.5},{'unexpected':10}]:
             self.assertEqual(self.client.post('/api/cladding/plan',json={**BASE,**patch}).status_code,422)
+    @unittest.skipUnless(os.path.exists(FIXTURE), 'fixtures/AR-509.pdf sample drawing not present')
     def test_pdf_regression(self):
-        with fitz.open() as doc:
-            page=doc.new_page();page.insert_text((72,72),'EWMB-01 Beige Travertine Romano Classico +3.20');data=doc.tobytes()
-        r=self.client.post('/analyze',files={'file':('elevation.pdf',data,'application/pdf')});self.assertEqual(r.status_code,200);self.assertIn('EWMB-01',r.json()['detected_codes']);self.assertEqual(r.json()['materials'][0]['evidence'][0]['source'],'elevation.pdf')
+        with open(FIXTURE,'rb') as f: data=f.read()
+        r=self.client.post('/analyze',files={'file':('elevation.pdf',data,'application/pdf')});self.assertEqual(r.status_code,200)
+        body=r.json();self.assertIn('EWMB-01',body['detected_codes'])
+        ewmb=next(m for m in body['materials'] if m['code']=='EWMB-01');self.assertEqual(ewmb['evidence'][0]['source'],'elevation.pdf')
     def test_invalid_pdf(self):
         self.assertEqual(self.client.post('/analyze',files={'file':('bad.pdf',b'not pdf','application/pdf')}).status_code,400)
+    @unittest.skipUnless(os.path.exists(FIXTURE), 'fixtures/AR-509.pdf sample drawing not present')
+    def test_upload_batch_builds_live_register(self):
+        with open(FIXTURE,'rb') as f: data=f.read()
+        r=self.client.post('/api/project/upload-batch',files=[('files',('AR-509.pdf',data,'application/pdf'))])
+        self.assertEqual(r.status_code,200);body=r.json()
+        self.assertIsNotNone(body['project_register']);self.assertEqual(body['project_register']['sheets_analyzed'],['AR-509'])
+        stone_codes={z['material_code'] for z in body['project_register']['zones']}
+        self.assertEqual(stone_codes,{'EWMB-01','EWST-01','EWST-02'})
+        r2=self.client.get('/api/project/external-stone');self.assertEqual(r2.status_code,200)
+        self.assertEqual(r2.json()['sheets_analyzed'],['AR-509'])
 
 if __name__=='__main__': unittest.main(verbosity=2)

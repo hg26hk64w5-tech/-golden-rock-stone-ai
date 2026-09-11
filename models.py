@@ -33,10 +33,37 @@ class StoneZone(BaseModel):
     gross_area_m2: Optional[float] = None
     notes: List[str] = []
 
+class ZoneCandidate(BaseModel):
+    """An auto-proposed wall zone: one per cladding material code detected on a sheet.
+    Width/height are intentionally absent here -- they remain RFI until confirmed."""
+    zone_id: str
+    sheet: str
+    material_code: str
+    material_name: str
+    thickness_mm: Optional[float] = None
+    candidate_dimensions_m: List[float] = []
+    status: Literal["RFI_REQUIRED", "verified"] = "RFI_REQUIRED"
+    note: str = ""
+
 class AnalysisResult(BaseModel):
     file_name: str
+    sheet_number: str = ""
     materials: List[Material]
     detected_codes: List[str]
     levels: List[str]
     dimensions_m: List[float]
+    zones: List[ZoneCandidate] = []
+    warnings: List[str]
+
+class ProjectRegister(BaseModel):
+    """Merged, multi-file analysis result -- computed live from whatever the client
+    uploads, instead of a static hand-authored register."""
+    project: str
+    status: str
+    sheets_analyzed: List[str]
+    materials: List[Material]
+    zones: List[ZoneCandidate]
+    levels_by_sheet: dict[str, List[str]]
+    dimensions_by_sheet: dict[str, List[float]]
+    rfi_required: List[str]
     warnings: List[str]
