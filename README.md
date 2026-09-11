@@ -33,6 +33,7 @@ External Wall Cladding is implemented for a rectangular zone. Internal and other
 * Stone 20mm; panel height at most 700mm.
 * No joints by default. Project-requested joints require an explicit positive width. A conflicting width raises an RFI.
 * Corner options: 45° mitre; 5mm then 45° Bird’s Mouth. Nominal face sizes do not substitute for approved return/corner cutting geometry.
+* Project Detail Profile `project_option2_25mm` supports the supplied reference drawing style: 25mm stone, 5mm horizontal joints, 2mm vertical joints, parapet grooves 20×5mm or 20×10mm, 5mm corner machine cut, and a 10×10mm groove with approved mockup glue. It generates numbered detail records for elevation, window side, wall corner, typical crown and roof balustrade crown. This profile is opt-in and does not replace the general 20mm rule.
 * No fixed minimum panel width. Optional material minimum/maximum limits are entered only after material selection. Slab sizes, edge trim and kerf must be entered.
 
 ## Panelization and setting-out
@@ -65,4 +66,4 @@ No GitHub push or Railway deployment was performed. Python/API tests and local b
 
 ## Validation
 
-See `TEST_REPORT.md`. Automated coverage includes all four systems, per-channel bracket quantities, missing dimensions, material dependencies, small-strip avoidance, 700mm cap, joints, waterproofing, insulation reference, survey deviation, final-face conflicts, input validation and PDF regression.
+See `TEST_REPORT.md`. Automated coverage includes all four systems, per-channel bracket quantities, missing dimensions, material dependencies, small-strip avoidance, 700mm cap, joints, detail profiles, waterproofing, insulation reference, survey deviation, final-face conflicts, input validation and PDF regression.

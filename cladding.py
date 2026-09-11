@@ -54,6 +54,15 @@ class PlanRequest(Strict):
     joints_requested: bool = False
     joint_mm: float | None = Field(default=None, ge=0)
     corner: Literal['45° mitre','5mm then 45° Bird’s Mouth'] = '45° mitre'
+    detail_profile: Literal['external_standard_20mm','project_option2_25mm','project_custom_30mm'] = 'external_standard_20mm'
+    horizontal_joint_mm: float | None = Field(default=None, ge=0)
+    vertical_joint_mm: float | None = Field(default=None, ge=0)
+    parapet_groove_width_mm: float | None = Field(default=None, gt=0)
+    parapet_groove_depth_mm: float | None = Field(default=None, gt=0)
+    corner_machine_cut_mm: float | None = Field(default=None, gt=0)
+    groove_width_mm: float | None = Field(default=None, gt=0)
+    groove_depth_mm: float | None = Field(default=None, gt=0)
+    detail_types: list[Literal['elevation','window_side','wall_corner','typical_crown','roof_balustrade_crown']] = Field(default_factory=lambda: ['elevation','window_side','wall_corner','typical_crown','roof_balustrade_crown'], max_length=20)
     survey: Survey = Field(default_factory=Survey)
     fabrication: dict[str, float | None] = Field(default_factory=dict)
     fabrication_approved: bool = False
@@ -75,14 +84,30 @@ def plan(p: PlanRequest):
     if not p.material or not p.material.name.strip() or not p.material.slabs:
         rfi('material', 'Select material and available slab sizes before panelization.')
     if p.material and p.material.thickness_mm != 20:
-        rfi('material.thickness_mm', 'Conflicts with external wall stone thickness of 20mm.')
+        if not (p.detail_profile == 'project_option2_25mm' and p.material.thickness_mm == 25):
+            rfi('material.thickness_mm', 'Stone thickness conflicts with the selected detail profile.')
+    profile = {'external_standard_20mm': {'label':'External standard - 20mm stone','stone_thickness_mm':20,'horizontal_joint_mm':0,'vertical_joint_mm':0}, 'project_option2_25mm': {'label':'Project Option 2 - 25mm stone with grooves','stone_thickness_mm':25,'horizontal_joint_mm':5,'vertical_joint_mm':2}, 'project_custom_30mm': {'label':'Project-specific - 30mm stone','stone_thickness_mm':30,'horizontal_joint_mm':0,'vertical_joint_mm':0}}[p.detail_profile]
+    if p.detail_profile == 'project_option2_25mm':
+        if p.material is None or p.material.thickness_mm != 25: rfi('detail_profile.material', 'Project Option 2 requires 25mm stone.')
+        if p.horizontal_joint_mm != 5: rfi('horizontal_joint_mm', 'Project Option 2 requires 5mm horizontal joints.')
+        if p.vertical_joint_mm != 2: rfi('vertical_joint_mm', 'Project Option 2 requires 2mm vertical joints.')
+        if p.parapet_groove_width_mm not in (20,): rfi('parapet_groove_width_mm', 'Project Option 2 parapet groove width is 20mm.')
+        if p.parapet_groove_depth_mm not in (5,10): rfi('parapet_groove_depth_mm', 'Project Option 2 parapet groove depth must be 5mm or 10mm by detail.')
+        if p.corner_machine_cut_mm != 5: rfi('corner_machine_cut_mm', 'Project Option 2 corner machine cut is 5mm.')
+        if p.groove_width_mm != 10 or p.groove_depth_mm != 10: rfi('groove', 'Project Option 2 groove is 10mm × 10mm and requires approved mockup glue.')
+    else:
+        if p.horizontal_joint_mm not in (None,0): rfi('horizontal_joint_mm', 'The standard profile defaults to no joints unless the project requests them.')
+    if p.detail_profile == 'project_custom_30mm':
+        if p.material is None or p.material.thickness_mm != 30: rfi('detail_profile.material', 'The 30mm profile requires 30mm stone.')
+        if p.horizontal_joint_mm is None: rfi('horizontal_joint_mm', 'Enter the approved horizontal joint for the 30mm project profile.')
+        if p.vertical_joint_mm is None: rfi('vertical_joint_mm', 'Enter the approved vertical joint for the 30mm project profile.')
     if p.material and p.material.min_panel_width_mm is not None and p.material.max_panel_width_mm is not None and p.material.min_panel_width_mm > p.material.max_panel_width_mm:
         rfi('material.panel_width_limits', 'Minimum panel width exceeds material maximum.')
     if p.joints_requested and (p.joint_mm is None or p.joint_mm <= 0):
         rfi('joint_mm', 'Project-requested joints need an explicit positive dimension.')
     if not p.joints_requested and p.joint_mm not in (None,0):
         rfi('joint_mm', 'Joint dimension conflicts with no-joints default.')
-    joint = (p.joint_mm or 0) if p.joints_requested else 0
+    joint = (p.joint_mm or 0) if p.joints_requested else profile['horizontal_joint_mm']
     for field in FABRICATION_FIELDS:
         value = p.fabrication.get(field)
         if value is None or not math.isfinite(value) or value <= 0:
@@ -147,7 +172,7 @@ def plan(p: PlanRequest):
                     rfi('fabrication.fixing_side_offset_mm', 'Opposing side offsets overlap or exceed panel width.')
                 for row in range(rows):
                     for col in range(cols):
-                        panels.append({'id':f'P{row+1}-{col+1}','x_mm':col*(w+joint),'y_mm':row*(h+joint),'width_mm':w,'height_mm':h,'thickness_mm':20})
+                        panels.append({'id':f'P{row+1}-{col+1}','x_mm':col*(w+joint),'y_mm':row*(h+joint),'width_mm':w,'height_mm':h,'thickness_mm':profile['stone_thickness_mm']})
     fixing = {'pin_diameter_mm':5,'pin_embedment_mm':20,'uniform_projection_per':'system/zone'}
     if p.system == 'U':
         fixing.update({'large_brackets':{'count':4,'size_mm':[100,100],'positions':'2 top + 2 bottom'},'small_reverse_brackets':{'count':4,'size_mm':[50,100],'positions':'between large brackets'}})
@@ -161,5 +186,6 @@ def plan(p: PlanRequest):
         quantities = {'u_channel_pieces':p.u_channel_count,'large_brackets':4*p.u_channel_count,'small_reverse_brackets':4*p.u_channel_count,'total_brackets':8*p.u_channel_count}
     status = 'RFI_REQUIRED' if rfis else 'REVIEW_REQUIRED'
     area = p.width_mm*p.height_mm/1e6 if p.width_mm and p.height_mm and p.dimensions_verified else None
-    return {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':{'stone_thickness_mm':20,'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'corner':p.corner,'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0},'setting_out':setting,'fixing_details':fixing,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels},'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
+    detail_sheet = {'status':'PRELIMINARY — NOT FOR FABRICATION','profile':profile['label'],'sheet_title':'External cladding pattern drawings','detail_numbers':{name:i+1 for i,name in enumerate(p.detail_types)},'details':p.detail_types,'notes':['Do not scale; use written dimensions only.','All dimensions in millimetres; levels in metres.','Verify site dimensions before production.','Coordinate discrepancies between drawings, specification and BOQ with the designer.','Window side, wall corner, typical crown and roof balustrade crown require approved fixing and waterproofing details.'],'profile_dimensions':{'stone_thickness_mm':profile['stone_thickness_mm'],'horizontal_joint_mm':p.horizontal_joint_mm if p.detail_profile == 'project_option2_25mm' else joint,'vertical_joint_mm':p.vertical_joint_mm,'parapet_groove_width_mm':p.parapet_groove_width_mm,'parapet_groove_depth_mm':p.parapet_groove_depth_mm,'corner_machine_cut_mm':p.corner_machine_cut_mm,'groove_width_mm':p.groove_width_mm,'groove_depth_mm':p.groove_depth_mm,'glue_mockup_required':p.detail_profile == 'project_option2_25mm'}}
+    return {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':{'detail_profile':p.detail_profile,'stone_thickness_mm':profile['stone_thickness_mm'],'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'vertical_joint_mm':p.vertical_joint_mm,'corner':p.corner,'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0},'setting_out':setting,'fixing_details':fixing,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels,'detail_sheet':detail_sheet},'detail_sheet':detail_sheet,'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
 

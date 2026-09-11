@@ -58,6 +58,12 @@ class CladdingTests(unittest.TestCase):
         r=self.run_plan(fabrication={'fixing_top_offset_mm':400,'fixing_bottom_offset_mm':400,'fixing_side_offset_mm':900});self.assertIn('fabrication.fixing_offsets',self.fields(r));self.assertIn('fabrication.fixing_side_offset_mm',self.fields(r))
     def test_conflicting_material_limits(self):
         m=copy.deepcopy(BASE['material']);m.update(min_panel_width_mm=500,max_panel_width_mm=300);self.assertIn('material.panel_width_limits',self.fields(self.run_plan(material=m)))
+    def test_project_option2_detail_profile(self):
+        m=copy.deepcopy(BASE['material']);m['thickness_mm']=25
+        r=self.run_plan(detail_profile='project_option2_25mm',material=m,horizontal_joint_mm=5,vertical_joint_mm=2,parapet_groove_width_mm=20,parapet_groove_depth_mm=5,corner_machine_cut_mm=5,groove_width_mm=10,groove_depth_mm=10)
+        self.assertEqual(r['rules']['stone_thickness_mm'],25);self.assertEqual(r['rules']['joint_mm'],5);self.assertEqual(r['detail_sheet']['detail_numbers']['window_side'],2);self.assertEqual(r['detail_sheet']['profile_dimensions']['vertical_joint_mm'],2);self.assertFalse(any(x['field'] in {'detail_profile.material','horizontal_joint_mm','vertical_joint_mm','parapet_groove_width_mm','parapet_groove_depth_mm','corner_machine_cut_mm','groove'} for x in r['rfis']))
+    def test_project_option2_missing_detail_data_is_rfi(self):
+        m=copy.deepcopy(BASE['material']);m['thickness_mm']=25;r=self.run_plan(detail_profile='project_option2_25mm',material=m);self.assertIn('horizontal_joint_mm',self.fields(r));self.assertIn('groove',self.fields(r))
 
 class ApiTests(unittest.TestCase):
     def setUp(self): self.client=TestClient(app)
