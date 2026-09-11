@@ -16,7 +16,8 @@ class CladdingTests(unittest.TestCase):
     def test_empty_request_blocks_fabrication(self):
         r=plan(PlanRequest());self.assertEqual(r['status'],'RFI_REQUIRED');self.assertFalse(r['fabrication_released']);self.assertEqual(r['cutting_list']['items'],[])
     def test_u_brackets_per_channel(self):
-        q=self.run_plan()['quantity_takeoff']['bracket_count'];self.assertEqual(q,{'u_channel_pieces':3,'large_brackets':12,'small_reverse_brackets':12,'total_brackets':24})
+        q=self.run_plan()['quantity_takeoff']['bracket_count'];self.assertEqual(q,{'u_channel_pieces':3,'u_channel_length_m':8.4,'large_brackets':12,'small_reverse_brackets':12,'total_brackets':24,'fischer_anchors':96,'anchor_system':'Fischer anchor + epoxy injection at each drilled hole'})
+        f=self.run_plan()['fixing_details']; self.assertEqual(f['channels_per_stone_piece'],2); self.assertEqual(f['u_channel_length_m'],2.8); self.assertEqual(f['u_channel_length_per_stone_piece_m'],5.6); self.assertEqual(f['anchors_per_bracket'],4); self.assertEqual(f['anchors_per_stone_piece'],64)
     def test_missing_channel_count_not_invented(self):
         r=self.run_plan(u_channel_count=None);self.assertIsNone(r['quantity_takeoff']['bracket_count']);self.assertIn('u_channel_count',self.fields(r))
     def test_all_systems(self):
