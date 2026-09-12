@@ -2,13 +2,14 @@
 import math
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
+from connection_rules import Connection, resolve_connection
 
 WORKFLOW = ['Scope', 'Internal/External', 'Area/Element', 'Installation System', 'Material', 'Panelization', 'Fixing Details', 'Shop Drawing', 'Cutting List', 'Quantity Takeoff', 'RFI']
 SYSTEMS = {
     'L': {'label': 'L-Bracket SS316 50mm', 'nominal_mm': 50},
     'Z': {'label': 'Z-Bracket SS316 70mm', 'nominal_mm': 70},
     'OMEGA': {'label': 'Omega SS316 70mm', 'nominal_mm': 70},
-    'U': {'label': 'U-Channel 41×41×41mm', 'channel_mm': [41,41,41], 'cavity_mm': 110},
+    'U': {'label': 'U-Channel 41×41×41mm', 'channel_mm': [41,41,41], 'support_face_from_wall_mm': 110},
 }
 
 class Strict(BaseModel):
@@ -60,8 +61,10 @@ class WallModule(Strict):
     channel_edge_offset_mm: float | None = Field(default=None, gt=0)
     start_boundary: Literal['corner','door','window','wall_end'] = 'corner'
     end_boundary: Literal['corner','door','window','wall_end'] = 'wall_end'
+    opening_return_mm: float | None = Field(default=None, gt=0)
 
 class PlanRequest(Strict):
+    connection: Connection = Field(default_factory=Connection)
     channel_layout: ChannelLayout | None = None
     bracket_layout: BracketLayout | None = None
     wall_module: WallModule | None = None
@@ -149,29 +152,28 @@ def plan(p: PlanRequest):
     joint = (p.joint_mm or 0) if p.joints_requested else profile['horizontal_joint_mm']
     for field in FABRICATION_FIELDS:
         value = p.fabrication.get(field)
+        if field == 'bracket_thickness_mm' and value is None:
+            continue  # Confirmed client dimension: 3mm; no guessed anchor geometry.
         if value is None or not math.isfinite(value) or value <= 0:
             rfi('fabrication.'+field, 'Missing or invalid fabrication dimension; obtain approved detail.')
     for field in p.fabrication:
         if field not in FABRICATION_FIELDS: rfi('fabrication.'+field, 'Unrecognized fabrication dimension; clarify its meaning.')
     if not p.fabrication_approved: rfi('fabrication_approved', 'Fixing layout, anchors, corner geometry and structural suitability require approved detail.')
-    if p.fabrication.get('pin_length_mm') is not None and p.fabrication['pin_length_mm'] < 20:
-        rfi('fabrication.pin_length_mm', 'Pin length cannot be shorter than the 20mm embedment.')
+    connection = resolve_connection(p, rfi)
     s = p.survey
     setting = None
     if not s.wall_offsets_mm or not s.datum or not s.datum.strip():
         rfi('survey', 'Survey points and a common datum with positive outward normal are required.')
-    cavity = 110 if p.system == 'U' else s.cavity_mm
-    if p.system == 'U' and s.cavity_mm not in (None,110): rfi('survey.cavity_mm', 'U-Channel cavity must be 110mm.')
-    if cavity is None: rfi('survey.cavity_mm', 'Confirm cavity; nominal bracket size is not a cavity dimension.')
-    if s.cavity_reference is None: rfi('survey.cavity_reference', 'Confirm whether cavity is measured from waterproofing or insulation face.')
-    if p.rock_wool and s.cavity_reference == 'waterproofing_face' and cavity is not None and cavity < 50:
-        rfi('survey.cavity_mm', '50mm rock wool cannot fit inside this cavity.')
-    if s.wall_offsets_mm and cavity is not None and s.cavity_reference:
+    if s.cavity_mm is not None or s.cavity_reference is not None:
+        rfi('survey.cavity_mm' if s.cavity_mm is not None else 'survey.cavity_reference', 'Legacy cavity input is superseded. Confirm connection dimensions from the structural wall face; insulation is inside that distance.')
+    if s.wall_offsets_mm:
         closest = max(s.wall_offsets_mm)
         deviation = closest-min(s.wall_offsets_mm)
-        face = closest + 4 + (50 if p.rock_wool and s.cavity_reference == 'insulation_face' else 0) + cavity + (p.material.thickness_mm if p.material else 20)
-        setting = {'datum':s.datum, 'closest_wall_point_mm':closest, 'wall_deviation_mm':deviation, 'final_stone_face_mm':face, 'cavity_mm':cavity, 'cavity_reference':s.cavity_reference, 'uniform_bracket_projection_mm':s.bracket_projection_mm, 'zone':p.zone, 'system':p.system}
-        if s.final_stone_face_mm is not None and abs(s.final_stone_face_mm-face) > 0.01:
+        def absolute(value):
+            return closest + value if value is not None else None
+        face = absolute(connection['final_stone_face_from_wall_mm'])
+        setting = {'datum':s.datum, 'closest_wall_point_mm':closest, 'wall_deviation_mm':deviation, 'final_stone_face_mm':face, 'support_face_mm':absolute(connection['support_face_from_wall_mm']), 'stone_back_mm':absolute(connection['stone_back_from_wall_mm']), 'reference':'structural_wall_face', 'uniform_bracket_projection_mm':s.bracket_projection_mm, 'zone':p.zone, 'system':p.system}
+        if face is not None and s.final_stone_face_mm is not None and abs(s.final_stone_face_mm-face) > 0.01:
             rfi('survey.final_stone_face_mm', 'Requested final face conflicts with closest wall point and build-up.')
         if s.adjustment_capacity_mm is None or s.adjustment_capacity_mm < deviation:
             rfi('survey.adjustment_capacity_mm', 'Approved adjustment capacity must accommodate wall deviation without varying bracket projection.')
@@ -218,7 +220,7 @@ def plan(p: PlanRequest):
                 for row in range(rows):
                     for col in range(cols):
                         panels.append({'id':f'P{row+1}-{col+1}','x_mm':col*(w+joint),'y_mm':row*(h+joint),'width_mm':w,'height_mm':h,'thickness_mm':profile['stone_thickness_mm']})
-    fixing = {'pin_diameter_mm':5,'pin_embedment_mm':20,'uniform_projection_per':'system/zone'}
+    fixing = {'pin_diameter_mm':5,'pin_embedment_mm':connection['embedment_mm'],'metal_thickness_mm':3,'screw_projection_mm':connection['screw_projection_mm'],'uniform_projection_per':'system/zone'}
     if p.stone_fixings_per_piece is None:
         rfi('stone_fixings_per_piece', 'Select 3 or 4 flat bolts, L-angles or pins per stone piece.')
     if p.stone_fixing_type is None:
@@ -247,13 +249,13 @@ def plan(p: PlanRequest):
         u_channel_detail = {
             'status': 'PRELIMINARY — NOT FOR FABRICATION',
             'sheet_title': 'Separate U-Channel fixing detail',
-            'channel_section': {'profile': 'U-Channel SS316', 'size_mm': [41, 41, 41], 'length_m': 2.8, 'cavity_mm': 110, 'stone_thickness_mm': profile['stone_thickness_mm']},
+            'channel_section': {'profile': 'U-Channel SS316', 'size_mm': [41, 41, 41], 'length_m': 2.8, 'metal_thickness_mm':3, 'support_face_from_wall_mm': 110, 'stone_thickness_mm': profile['stone_thickness_mm']},
             'insulation': {'type': 'Rock Wool', 'thickness_mm': 50, 'included_when_selected': p.rock_wool},
             'bracket_schedule': [
                 {'type': 'Large bracket', 'size_mm': [100,100], 'quantity_per_channel': 4, 'positions': '2 top + 2 bottom'},
                 {'type': 'Small reverse bracket', 'size_mm': [50,100], 'quantity_per_channel': 4, 'positions': 'equally distributed between large brackets'},
             ],
-            'anchor_detail': {'anchor': 'Fischer', 'anchors_per_bracket': 4, 'hole_sealing': 'Epoxy injection at each drilled hole', 'pin_diameter_mm': 5, 'pin_embedment_mm': 20},
+            'anchor_detail': {'anchor': 'Fischer', 'anchors_per_bracket': 4, 'hole_sealing': 'Epoxy injection at each drilled hole', 'pin_diameter_mm': 5, 'pin_embedment_mm': connection['embedment_mm']},
             'panel_relation': '2 U-Channels per stone piece; 4 large + 4 small brackets per channel',
             'sections': ['U-channel vertical section', 'top bracket section', 'bottom bracket section', 'reverse bracket section', 'stone-to-channel interface', 'waterproofing and Rock Wool build-up'],
             'corner_intersection': {'projection_mm': 110, 'projection_m': 0.11, 'requirement': 'Required 110mm projection at the meeting point of corner returns.'},
@@ -272,6 +274,7 @@ def plan(p: PlanRequest):
     rules = {'detail_profile':p.detail_profile,'stone_thickness_mm':profile['stone_thickness_mm'],'max_panel_height_mm':700,'minimum_panel_width_mm':m.min_panel_width_mm if m else None,'joint_mm':joint,'vertical_joint_mm':p.vertical_joint_mm,'corner':p.corner,'corner_intersection_projection_mm':110,'material_type':p.material_type,'material_weight_kg_m2':p.material_weight_kg_m2 if p.material_weight_kg_m2 is not None else (70 if p.material_type in ('Travertine','Limestone') else None),'waterproofing':{'type':'cementitious','product':p.waterproofing,'coats':2,'coat_thickness_mm':2,'total_mm':4},'rock_wool_mm':50 if p.rock_wool else 0,'engineering_notice':'PRELIMINARY: Engineer to verify applicable Dubai Municipality and authority requirements. Compliance is not certified; not for fabrication.'}
     if p.system == 'U':
         rules.update({'u_channels_per_stone_piece':2,'u_channel_length_m':2.8,'u_channel_length_per_stone_piece_m':5.6,'large_brackets_per_stone_piece':8,'small_reverse_brackets_per_stone_piece':8,'fischer_anchors_per_bracket':4,'fischer_anchors_per_stone_piece':64})
+    rules['connection_geometry'] = connection
     engineering_checklist = [
         {'id':'ENG-01','item':'Substrate description, strength and anchor zones','status':'RFI_REQUIRED'},
         {'id':'ENG-02','item':'Stone weight, wind load, pull-out, shear and deflection checks','status':'RFI_REQUIRED'},
@@ -288,9 +291,27 @@ def plan(p: PlanRequest):
     ]
     result = {'status':status,'fabrication_released':False,'workflow':WORKFLOW,'zone':p.zone,'system':SYSTEMS.get(p.system),'rules':rules,'engineering_checklist':engineering_checklist,'setting_out':setting,'fixing_details':fixing,'fixing_layout':fixing_layout,'layout':layout,'shop_drawing':{'status':'PRELIMINARY — NOT FOR FABRICATION','panels':panels,'detail_sheet':detail_sheet,'fixing_layout':fixing_layout,'engineering_checklist':engineering_checklist,'u_channel_detail':u_channel_detail},'detail_sheet':detail_sheet,'u_channel_detail':u_channel_detail,'cutting_list':{'status':'PRELIMINARY — NOT FOR FABRICATION','items':panels},'quantity_takeoff':{'status':'PRELIMINARY','gross_wall_m2':area,'stone_net_m2':sum(x['width_mm']*x['height_mm'] for x in panels)/1e6 if panels else None,'panel_count':len(panels),'waterproofing_m2':area,'waterproofing_coat_m2':2*area if area is not None else None,'rock_wool_m2':area if p.rock_wool else 0,'bracket_count':quantities,'note':'Gross rectangular zone; openings, slab stock/nesting, waste and fixing quantities require project details.'},'rfis':rfis}
 
+    # Openings are dimensioned from the architectural return, then extended to the
+    # finished stone face. Never silently add a 70mm example: the return is a
+    # project input and remains RFI_REQUIRED until surveyed.
+    boundary = p.wall_module.end_boundary if p.wall_module else None
+    if boundary in ('door','window'):
+        ret = p.wall_module.opening_return_mm
+        if ret is None:
+            rfi('termination.opening_return_mm', 'Enter the verified architectural opening return (for example 70mm) before sizing the closure stone.')
+        result['termination_detail'] = {'boundary':boundary, 'architectural_return_mm':ret,
+            'additional_to_finished_face_mm': connection['final_stone_face_from_wall_mm'],
+            'closure_stone_width_rule':'architectural return + distance from return/structural wall to finished stone face',
+            'status':'RFI_REQUIRED' if ret is None or connection['final_stone_face_from_wall_mm'] is None else 'REVIEW_REQUIRED',
+            'sections':['opening jamb closure','head closure','sill/threshold closure'],
+            'note':'Return dimension is taken from the project drawing/survey; verify frame, sealant, drip and waterproofing continuity.'}
+    else:
+        result['termination_detail'] = None
 
 
 
+
+    result['connection_geometry'] = connection
     from drawing_engine import build_drawings
     drawing = build_drawings(p, result)
     for issue in drawing['rfis']:

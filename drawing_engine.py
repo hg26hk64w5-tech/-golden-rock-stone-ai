@@ -145,23 +145,22 @@ def build_drawings(p, result):
         text(sx,sy+700,'S03 - TYPICAL BUILD-UP SECTION (SCHEMATIC)',height=32)
         t=p.material.thickness_mm
         scale=3
-        layers=[('SUBSTRATE - thickness/site condition RFI',60,'GR_SUBSTRATE'),('CEMENTITIOUS WATERPROOFING 2 x 2mm',4,'GR_WATERPROOFING')]
+        layers=[('STRUCTURAL WALL / BLOCK - thickness RFI',60,'GR_SUBSTRATE'),('CEMENTITIOUS WATERPROOFING 2 x 2mm = 4mm',4,'GR_WATERPROOFING')]
         if p.rock_wool: layers.append(('ROCK WOOL 50mm - retention/fire classification RFI',50,'GR_INSULATION'))
         ref=p.survey.cavity_reference
         if p.system=='U':
-            # Cavity fixed by the U-Channel system definition (see cladding.py); shown
-            # even before the reference face is confirmed, exactly as before.
-            gap=110-(50 if p.rock_wool and ref=='waterproofing_face' else 0)
-            if ref:
-                layers.append((f'REMAINING CAVITY {gap:g}mm; origin: {ref}',gap,'GR_CAVITY'))
-            else:
-                layers.append(('CAVITY 110mm - measurement origin RFI / gap NTS',60,'GR_CAVITY'))
+            # The confirmed 110mm terminates at the OUTER channel face. Rock wool
+            # and waterproofing are inside this build-up and are never added to it.
+            layers.append(('WALL TO OUTER U-CHANNEL FACE = 110mm',110,'GR_CAVITY'))
+            layers.append(('U-CHANNEL SS316 41x41x41, gauge 3mm',41,'GR_CHANNEL'))
+            conn=result.get('connection_geometry') or {}
+            layers.append((f'SCREW PROJECTION {conn.get("screw_projection_mm") or "RFI"}mm; STONE EMBEDMENT {conn.get("embedment_mm") or "RFI"}mm',40,'GR_FIXING'))
         else:
             # L/Z/Omega cavity is whatever the survey confirms -- never the U figure.
             cavity_val = (result.get('setting_out') or {}).get('cavity_mm')
             if cavity_val is not None and ref:
-                gap=cavity_val-(50 if p.rock_wool and ref=='waterproofing_face' else 0)
-                layers.append((f'REMAINING CAVITY {gap:g}mm; origin: {ref}',gap,'GR_CAVITY'))
+                gap=cavity_val
+                layers.append((f'SURVEYED WALL-TO-SUPPORT DISTANCE {gap:g}mm; origin: {ref}',gap,'GR_CAVITY'))
             else:
                 layers.append(('CAVITY - width and measurement origin RFI (survey.cavity_mm)',60,'GR_CAVITY'))
         layers.append((f'STONE {t:g}mm',t,'GR_STONE'))
@@ -175,6 +174,7 @@ def build_drawings(p, result):
             text(tx,ty,label,height=20)
             x+=width*scale
         text(sx,sy-70,'Channel/bracket/anchor attachment: project-specific geometry RFI; section enlarged, do not scale.',height=19)
+        text(sx,sy-190,'110mm is measured wall face to outer support face; waterproofing and Rock Wool are contained within this build-up.',height=19)
         text(sx,sy-110,'Final stone sealer: approved breathable/non-staining product; compatibility and coverage RFI.',height=19)
         if p.system=='U':
             text(sx,sy-150,'Per channel: 4 large 100x100 + 4 reverse 50x100; 4 anchors per bracket. Pin diameter 5, embedment 20.',height=19)

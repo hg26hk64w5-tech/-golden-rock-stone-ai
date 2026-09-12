@@ -5,7 +5,7 @@ import re
 from analyzer import analyze_pdf, merge_project_register, PdfReadError
 from cladding import PlanRequest, plan, SYSTEMS, WORKFLOW, FABRICATION_FIELDS
 
-app = FastAPI(title="Golden Rock Stone AI", version="1.5.0")
+app = FastAPI(title="Golden Rock Stone AI", version="1.6.0")
 
 # In-memory cache of the most recent live analysis, so a later GET (e.g. a page
 # refresh, or the client simply re-reading the register) sees what was just uploaded
