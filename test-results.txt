@@ -1,32 +1,5 @@
-test_health_frontend_and_rules (test_cladding.ApiTests.test_health_frontend_and_rules) ... ok
-test_invalid_dimension_and_system (test_cladding.ApiTests.test_invalid_dimension_and_system) ... ok
-test_invalid_pdf (test_cladding.ApiTests.test_invalid_pdf) ... ok
-test_pdf_regression (test_cladding.ApiTests.test_pdf_regression) ... ok
-test_plan_endpoint (test_cladding.ApiTests.test_plan_endpoint) ... ok
-test_all_systems (test_cladding.CladdingTests.test_all_systems) ... ok
-test_cavity_conflict (test_cladding.CladdingTests.test_cavity_conflict) ... ok
-test_closest_point_setting_out (test_cladding.CladdingTests.test_closest_point_setting_out) ... ok
-test_conflicting_material_limits (test_cladding.CladdingTests.test_conflicting_material_limits) ... ok
-test_conflicts_never_release (test_cladding.CladdingTests.test_conflicts_never_release) ... ok
-test_empty_request_blocks_fabrication (test_cladding.CladdingTests.test_empty_request_blocks_fabrication) ... ok
-test_equalization_avoids_small_end_strip (test_cladding.CladdingTests.test_equalization_avoids_small_end_strip) ... ok
-test_final_face_conflict (test_cladding.CladdingTests.test_final_face_conflict) ... ok
-test_height_limit_and_exact_coverage (test_cladding.CladdingTests.test_height_limit_and_exact_coverage) ... ok
-test_insufficient_adjustment (test_cladding.CladdingTests.test_insufficient_adjustment) ... ok
-test_joint_conflict_and_missing (test_cladding.CladdingTests.test_joint_conflict_and_missing) ... ok
-test_joint_coverage (test_cladding.CladdingTests.test_joint_coverage) ... ok
-test_material_before_panelization (test_cladding.CladdingTests.test_material_before_panelization) ... ok
-test_material_minimum_enforced (test_cladding.CladdingTests.test_material_minimum_enforced) ... ok
-test_missing_allowances (test_cladding.CladdingTests.test_missing_allowances) ... ok
-test_missing_channel_count_not_invented (test_cladding.CladdingTests.test_missing_channel_count_not_invented) ... ok
-test_no_fixed_minimum (test_cladding.CladdingTests.test_no_fixed_minimum) ... ok
-test_overlapping_fixing_offsets (test_cladding.CladdingTests.test_overlapping_fixing_offsets) ... ok
-test_rock_wool_reference (test_cladding.CladdingTests.test_rock_wool_reference) ... ok
-test_u_brackets_per_channel (test_cladding.CladdingTests.test_u_brackets_per_channel) ... ok
-test_unknown_scope (test_cladding.CladdingTests.test_unknown_scope) ... ok
-test_waterproofing_and_corners (test_cladding.CladdingTests.test_waterproofing_and_corners) ... ok
-
+.............................................................
 ----------------------------------------------------------------------
-Ran 27 tests in 0.131s
+Ran 61 tests in 3.434s
 
 OK

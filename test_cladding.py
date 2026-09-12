@@ -1,6 +1,8 @@
 import copy
+import io
 import os
 import unittest
+import zipfile
 from fastapi.testclient import TestClient
 from main import app
 from cladding import PlanRequest, plan
@@ -85,6 +87,18 @@ class ApiTests(unittest.TestCase):
         r=self.client.post('/analyze',files={'file':('elevation.pdf',data,'application/pdf')});self.assertEqual(r.status_code,200)
         body=r.json();self.assertIn('EWMB-01',body['detected_codes'])
         ewmb=next(m for m in body['materials'] if m['code']=='EWMB-01');self.assertEqual(ewmb['evidence'][0]['source'],'elevation.pdf')
+    @unittest.skipUnless(os.path.exists(FIXTURE), 'fixtures/AR-509.pdf sample drawing not present')
+    def test_pdf_regression_sheet_number_from_real_filename(self):
+        # Regression test for a bug found while adding ZIP support: the endpoint used to
+        # save the upload under tempfile's own randomised name before analysing it, which
+        # silently defeated the "read the sheet number from the filename" shortcut for
+        # every real upload (as opposed to a direct analyze_pdf(real_path) call in a
+        # script/test) and could fall back to a mis-detected sheet like "TD-02" instead.
+        # Uploading under the drawing's real name must resolve the correct sheet number.
+        with open(FIXTURE,'rb') as f: data=f.read()
+        r=self.client.post('/analyze',files={'file':('AR-509.pdf',data,'application/pdf')})
+        self.assertEqual(r.status_code,200)
+        self.assertEqual(r.json()['sheet_number'],'AR-509')
     def test_invalid_pdf(self):
         self.assertEqual(self.client.post('/analyze',files={'file':('bad.pdf',b'not pdf','application/pdf')}).status_code,400)
     @unittest.skipUnless(os.path.exists(FIXTURE), 'fixtures/AR-509.pdf sample drawing not present')
@@ -97,5 +111,28 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(stone_codes,{'EWMB-01','EWST-01','EWST-02'})
         r2=self.client.get('/api/project/external-stone');self.assertEqual(r2.status_code,200)
         self.assertEqual(r2.json()['sheets_analyzed'],['AR-509'])
+    @unittest.skipUnless(os.path.exists(FIXTURE), 'fixtures/AR-509.pdf sample drawing not present')
+    def test_upload_batch_extracts_zip(self):
+        # A project is often shared as one ZIP of the whole drawing package rather than
+        # individual file picks. A PDF nested inside an uploaded ZIP (in a subfolder, as
+        # real project exports usually are) must be analysed exactly like a directly
+        # uploaded PDF, and macOS's "__MACOSX/" junk entries must not appear as files.
+        with open(FIXTURE,'rb') as f: data=f.read()
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,'w') as zf:
+            zf.writestr('ProjectPack/Drawings/AR-509.pdf', data)
+            zf.writestr('__MACOSX/._AR-509.pdf', b'junk')
+            zf.writestr('ProjectPack/notes.txt', b'some notes')
+        r=self.client.post('/api/project/upload-batch',files=[('files',('ProjectFiles.zip',buf.getvalue(),'application/zip'))])
+        self.assertEqual(r.status_code,200);body=r.json()
+        self.assertFalse(any('__MACOSX' in f['file_name'] for f in body['files']))
+        self.assertEqual(body['project_register']['sheets_analyzed'],['AR-509'])
+        stone_codes={z['material_code'] for z in body['project_register']['zones']}
+        self.assertEqual(stone_codes,{'EWMB-01','EWST-01','EWST-02'})
+    def test_upload_batch_handles_corrupt_zip(self):
+        r=self.client.post('/api/project/upload-batch',files=[('files',('bad.zip',b'not a real zip','application/zip'))])
+        self.assertEqual(r.status_code,200);body=r.json()
+        self.assertEqual(body['files'][0]['status'],'ANALYSIS_FAILED')
+        self.assertEqual(len(body['analysis_errors']),1)
 
 if __name__=='__main__': unittest.main(verbosity=2)
