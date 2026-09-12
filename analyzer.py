@@ -291,6 +291,7 @@ def analyze_pdf(path: str) -> AnalysisResult:
     # cannot safely assign a specific wall length/height to a specific code without the
     # underlying CAD geometry or a site survey.
     zones = []
+    opening_count = len(re.findall(r"\b(?:WINDOWS?|DOORS?|OPENINGS?|GLAZING|SHOPFRONT)\b", all_text, re.I))
     for mat in materials:
         if mat.code == "(unlabelled)" or not mat.category.startswith("Natural Stone"):
             continue
@@ -303,6 +304,30 @@ def analyze_pdf(path: str) -> AnalysisResult:
             candidate_dimensions_m=dims[:12],
             status="RFI_REQUIRED",
             note="Auto-proposed from the legend table; width/height must still be confirmed from CAD/survey before panelization.",
+            confidence=0.95,
+            source="pdf_legend",
+            opening_count=opening_count,
+            boundary_hint="Review corners, doors and windows from CAD elevation before approval.",
+        ))
+
+    # Keep a selectable work area when the finish legend is on another sheet. The
+    # proposal is deliberately low-confidence and remains RFI_REQUIRED.
+    facade_cues = len(re.findall(r"\b(?:ELEVATION|FACADE|FAÇADE|WALL\s+SECTION|EXTERNAL\s+WALL|CLADDING|STONE\s+FINISH)\b", all_text, re.I))
+    excluded = bool(re.search(r"\bECLM\s*[- ]?01\b", all_text, re.I))
+    if not zones and facade_cues and not excluded:
+        zones.append(ZoneCandidate(
+            zone_id=f"{sheet_number}-EXTERNAL-WALL-01",
+            sheet=sheet_number,
+            material_code="RFI-MATERIAL",
+            material_name="External wall finish to be confirmed",
+            thickness_mm=None,
+            candidate_dimensions_m=dims[:12],
+            status="RFI_REQUIRED",
+            note="AI detected an elevation/facade or external-wall work area, but no stone code was found on this sheet. Confirm material, wall run and openings from CAD/survey.",
+            confidence=min(0.75, 0.35 + 0.08 * facade_cues),
+            source="pdf_text_inference",
+            opening_count=opening_count,
+            boundary_hint="Proposed sheet-level area; exact wall boundaries and termination points require CAD review.",
         ))
 
     warnings = [
@@ -310,6 +335,7 @@ def analyze_pdf(path: str) -> AnalysisResult:
         "Prefer explicit dimensions over scale-derived measurements.",
         "If wall width/height cannot be verified from explicit dimensions or levels, mark RFI_REQUIRED.",
         "candidate_dimensions_m lists every plausible number found on the sheet; it is not yet assigned to a specific wall run.",
+        "AI zone proposals are review aids. Confirm each boundary, opening termination and material code against CAD/survey before fabrication.",
     ]
     return AnalysisResult(
         file_name=source_name,

@@ -1,4 +1,13 @@
-# Golden Rock Stone AI v1.5
+# Golden Rock Stone AI v1.6
+
+## Automatic work-area detection
+
+Batch upload now proposes selectable external-wall work areas from elevation, facade,
+cladding and wall-section text even when the finish legend is located on another sheet.
+Each proposal reports its source, confidence, detected opening count and boundary hint.
+These proposals are review aids: exact wall runs, corner returns, window/door jambs,
+material code and dimensions remain `RFI_REQUIRED` until verified against the project DWG
+and site survey. Sheets labelled ECLM-01 remain excluded from external-stone proposals.
 
 Merged release: v1.3 drawing/white-interface work plus the supplied developer v0.3.1 upload/analyzer fixes (this was v1.4), plus a v1.5 review pass that extends the same explicit-geometry drawing approach from the U-Channel system to the L-Bracket/Z-Bracket/Omega systems. Prepared for manual GitHub upload; not deployed.
 

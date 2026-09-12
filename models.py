@@ -44,6 +44,10 @@ class ZoneCandidate(BaseModel):
     candidate_dimensions_m: List[float] = []
     status: Literal["RFI_REQUIRED", "verified"] = "RFI_REQUIRED"
     note: str = ""
+    confidence: float = Field(default=0.0, ge=0, le=1)
+    source: str = "pdf_text"
+    opening_count: int = Field(default=0, ge=0)
+    boundary_hint: Optional[str] = None
 
 class AnalysisResult(BaseModel):
     file_name: str

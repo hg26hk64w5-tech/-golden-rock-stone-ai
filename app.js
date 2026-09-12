@@ -16,11 +16,12 @@ function refreshProjectRegister(){return fetch('/api/project/external-stone').th
 function useZone(z){
  $('zone').value=z.zone_id; $('verified').checked=false;
  show(2); dirty();
- const catIsStone=true; // this list only ever contains Natural Stone zones (see analyzer.py)
- $('materialType').value='Travertine'; $('material').value=z.material_name;
+ const catIsStone=z.material_code!=='RFI-MATERIAL';
+ $('materialType').value=catIsStone && /limestone/i.test(z.material_name)?'Limestone':catIsStone?'Travertine':'';
+ $('material').value=catIsStone?z.material_name:'';
  if(z.thickness_mm){$('thickness').value=z.thickness_mm; if(z.thickness_mm===20)$('thicknessProfile').value='20'; else if(z.thickness_mm===25)$('thicknessProfile').value='25'; else if(z.thickness_mm===30)$('thicknessProfile').value='30';}
  const noteBox=$('zoneUseNote')||(()=>{const p=document.createElement('p');p.id='zoneUseNote';p.style.color='#e0bc78';$('form').querySelector('[data-step="2"]').append(p);return p;})();
- noteBox.textContent=`Auto-filled from sheet ${z.sheet}, code ${z.material_code}. Width/height and "verified" still need confirming from CAD/survey (${z.note})`;
+ noteBox.textContent=`Auto-filled from sheet ${z.sheet}, code ${z.material_code}. Width/height, material and "verified" still need confirming from CAD/survey (${z.note})`;
 }
 function renderDetectedZones(register){
  const box=$('detectedZones'); if(!box) return;
@@ -30,7 +31,8 @@ function renderDetectedZones(register){
  for(const z of register.zones){
   const card=document.createElement('div'); card.className='card';
   const t=document.createElement('strong'); t.textContent=`${z.zone_id}`; card.append(t);
-  const d=document.createElement('p'); d.textContent=`${z.material_name}${z.thickness_mm?` · ${z.thickness_mm}mm`:''} — sheet ${z.sheet}`; card.append(d);
+  const d=document.createElement('p'); d.textContent=`${z.material_name}${z.thickness_mm?` · ${z.thickness_mm}mm`:''} — sheet ${z.sheet} · confidence ${Math.round((z.confidence||0)*100)}% · openings detected ${z.opening_count||0}`; card.append(d);
+  const n=document.createElement('p'); n.textContent=z.note; card.append(n);
   const b=document.createElement('button'); b.type='button'; b.textContent='Use this zone →'; b.onclick=()=>useZone(z); card.append(b);
   box.append(card);
  }
