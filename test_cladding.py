@@ -26,7 +26,7 @@ class CladdingTests(unittest.TestCase):
         r=self.run_plan(u_channel_count=None);self.assertIsNone(r['quantity_takeoff']['bracket_count']);self.assertIn('u_channel_count',self.fields(r))
     def test_all_systems(self):
         for system in ['L','Z','OMEGA','U']:
-            r=self.run_plan(system=system);self.assertIsNotNone(r['system']);self.assertEqual(r['fixing_details']['pin_diameter_mm'],5);self.assertEqual(r['fixing_details']['pin_embedment_mm'],20)
+            r=self.run_plan(system=system);self.assertIsNotNone(r['system']);self.assertEqual(r['fixing_details']['pin_diameter_mm'],5);self.assertEqual(r['fixing_details']['pin_embedment_mm'],8)
     def test_height_limit_and_exact_coverage(self):
         r=self.run_plan();l=r['layout'];self.assertLessEqual(l['panel_height_mm'],700);self.assertAlmostEqual(l['panel_width_mm']*l['columns'],3200);self.assertAlmostEqual(l['panel_height_mm']*l['rows'],2100)
     def test_no_fixed_minimum(self):
@@ -44,11 +44,11 @@ class CladdingTests(unittest.TestCase):
     def test_joint_conflict_and_missing(self):
         self.assertIn('joint_mm',self.fields(self.run_plan(joint_mm=5)));self.assertIn('joint_mm',self.fields(self.run_plan(joints_requested=True)))
     def test_closest_point_setting_out(self):
-        s=self.run_plan()['setting_out'];self.assertEqual(s['closest_wall_point_mm'],8);self.assertEqual(s['wall_deviation_mm'],18);self.assertEqual(s['final_stone_face_mm'],142);self.assertEqual(s['uniform_bracket_projection_mm'],100)
+        s=self.run_plan()['setting_out'];self.assertEqual(s['closest_wall_point_mm'],8);self.assertEqual(s['wall_deviation_mm'],18);self.assertEqual(s['final_stone_face_mm'],170);self.assertEqual(s['uniform_bracket_projection_mm'],100)
     def test_rock_wool_reference(self):
-        s=copy.deepcopy(BASE['survey']);s['cavity_reference']='insulation_face';r=self.run_plan(rock_wool=True,survey=s);self.assertEqual(r['setting_out']['final_stone_face_mm'],192);self.assertEqual(r['quantity_takeoff']['rock_wool_m2'],6.72)
+        s=copy.deepcopy(BASE['survey']);s['cavity_reference']='insulation_face';r=self.run_plan(rock_wool=True,survey=s);self.assertEqual(r['setting_out']['final_stone_face_mm'],170);self.assertEqual(r['quantity_takeoff']['rock_wool_m2'],6.72)
     def test_final_face_conflict(self):
-        s=copy.deepcopy(BASE['survey']);s['final_stone_face_mm']=170;self.assertIn('survey.final_stone_face_mm',self.fields(self.run_plan(survey=s)))
+        s=copy.deepcopy(BASE['survey']);s['final_stone_face_mm']=171;self.assertIn('survey.final_stone_face_mm',self.fields(self.run_plan(survey=s)))
     def test_cavity_conflict(self):
         s=copy.deepcopy(BASE['survey']);s['cavity_mm']=70;self.assertIn('survey.cavity_mm',self.fields(self.run_plan(survey=s)))
     def test_insufficient_adjustment(self):

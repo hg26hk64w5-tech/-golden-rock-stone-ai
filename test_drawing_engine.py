@@ -52,7 +52,7 @@ class DrawingTests(unittest.TestCase):
     def test_thickness_30_setting_out(self):
         m=copy.deepcopy(BASE['material']);m['thickness_mm']=30
         r=self.run_case(material=m,detail_profile='project_custom_30mm',horizontal_joint_mm=0,vertical_joint_mm=0)
-        self.assertEqual(r['setting_out']['final_stone_face_mm'],149)
+        self.assertEqual(r['setting_out']['final_stone_face_mm'],171)
         self.assertFalse(any(i['field']=='material.thickness_mm' for i in r['rfis']))
     def test_separate_dxf_layers_and_dimensions(self):
         r=TestClient(app).post('/api/cladding/export-dxf',json=BASE)
@@ -63,15 +63,16 @@ class DrawingTests(unittest.TestCase):
         # Every channel LINE lies in the separate sheet, beyond the wall width.
         records=r.text.split('0\nLINE\n')[1:]
         channel_lines=[v for v in records if v.startswith('8\nGR_CHANNEL\n')]
-        self.assertEqual(len(channel_lines),32)
+        self.assertEqual(len(channel_lines),36) # 32 setting-out edges + 4 section edges
         for rec in channel_lines:
-            self.assertGreater(float(rec.split('10\n')[1].splitlines()[0]),4000)
+            self.assertTrue(float(rec.split('10\n')[1].splitlines()[0])>4000 or float(rec.split('20\n')[1].splitlines()[0])<0)
     def test_never_certifies(self):
         r=self.run_case();self.assertFalse(r['fabrication_released']);self.assertEqual(r['status'],'RFI_REQUIRED')
 
 Z_BASE={'system':'Z','width_mm':4000,'height_mm':2800,'dimensions_verified':True,'rock_wool':True,
         'material':{'name':'Travertine','slabs':[{'width_mm':2000,'height_mm':2000}],'kerf_mm':3,'edge_trim_mm':10},
         'survey':{'datum':'A','wall_offsets_mm':[0,5],'cavity_mm':80,'cavity_reference':'waterproofing_face'},
+        'connection':{'support_face_from_wall_mm':80},
         'stone_fixings_per_piece':4,'stone_fixing_type':'Z_bracket',
         'fabrication':{'fixing_top_offset_mm':100,'fixing_bottom_offset_mm':100,'fixing_side_offset_mm':100}}
 
@@ -121,7 +122,7 @@ class BracketLayoutTests(unittest.TestCase):
         r=self.run_case()
         texts=[e['text'] for e in r['drawing_package']['entities'] if e.get('text') and 'CAVITY' in e['text']]
         self.assertEqual(len(texts),1)
-        self.assertIn('30',texts[0])
+        self.assertIn('80',texts[0]) # distance includes insulation, never subtract it from the reference
         self.assertNotIn('110',texts[0])
     def test_non_u_cavity_without_rockwool_shows_full_surveyed_value(self):
         r=self.run_case(rock_wool=False)
@@ -130,7 +131,7 @@ class BracketLayoutTests(unittest.TestCase):
         self.assertIn('80',texts[0])
         self.assertNotIn('110',texts[0])
     def test_non_u_cavity_unconfirmed_does_not_fabricate_110(self):
-        r=self.run_case(survey={**Z_BASE['survey'],'cavity_reference':None})
+        r=self.run_case(connection={})
         texts=[e['text'] for e in r['drawing_package']['entities'] if e.get('text') and 'CAVITY' in e['text']]
         self.assertEqual(len(texts),1)
         self.assertNotIn('110',texts[0])

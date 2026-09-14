@@ -147,7 +147,8 @@ def build_drawings(p, result):
         scale=3
         layers=[('STRUCTURAL WALL / BLOCK - thickness RFI',60,'GR_SUBSTRATE'),('CEMENTITIOUS WATERPROOFING 2 x 2mm = 4mm',4,'GR_WATERPROOFING')]
         if p.rock_wool: layers.append(('ROCK WOOL 50mm - retention/fire classification RFI',50,'GR_INSULATION'))
-        ref=p.survey.cavity_reference
+        conn=result.get('connection_geometry') or {}
+        ref='structural_wall_face'
         if p.system=='U':
             # The confirmed 110mm terminates at the OUTER channel face. Rock wool
             # and waterproofing are inside this build-up and are never added to it.
@@ -157,12 +158,12 @@ def build_drawings(p, result):
             layers.append((f'SCREW PROJECTION {conn.get("screw_projection_mm") or "RFI"}mm; STONE EMBEDMENT {conn.get("embedment_mm") or "RFI"}mm',40,'GR_FIXING'))
         else:
             # L/Z/Omega cavity is whatever the survey confirms -- never the U figure.
-            cavity_val = (result.get('setting_out') or {}).get('cavity_mm')
+            cavity_val = conn.get('support_face_from_wall_mm')
             if cavity_val is not None and ref:
                 gap=cavity_val
-                layers.append((f'SURVEYED WALL-TO-SUPPORT DISTANCE {gap:g}mm; origin: {ref}',gap,'GR_CAVITY'))
+                layers.append((f'CAVITY REFERENCE: WALL-TO-SUPPORT DISTANCE {gap:g}mm; origin: {ref}',gap,'GR_CAVITY'))
             else:
-                layers.append(('CAVITY - width and measurement origin RFI (survey.cavity_mm)',60,'GR_CAVITY'))
+                layers.append(('CAVITY - support face RFI (connection.support_face_from_wall_mm)',60,'GR_CAVITY'))
         layers.append((f'STONE {t:g}mm',t,'GR_STONE'))
         x=sx
         for i,(label,width,layer) in enumerate(layers):
@@ -177,7 +178,7 @@ def build_drawings(p, result):
         text(sx,sy-190,'110mm is measured wall face to outer support face; waterproofing and Rock Wool are contained within this build-up.',height=19)
         text(sx,sy-110,'Final stone sealer: approved breathable/non-staining product; compatibility and coverage RFI.',height=19)
         if p.system=='U':
-            text(sx,sy-150,'Per channel: 4 large 100x100 + 4 reverse 50x100; 4 anchors per bracket. Pin diameter 5, embedment 20.',height=19)
+            text(sx,sy-150,f'Per channel: 4 large 100x100 + 4 reverse 50x100; 4 anchors per bracket. Pin diameter 5; penetration {conn.get("embedment_mm") or "RFI"}mm.',height=19)
         else:
             angles=(result.get('fixing_details') or {}).get('angles_per_stone_piece')
             label=(result.get('system') or {}).get('label','selected system')
